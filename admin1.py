@@ -197,10 +197,10 @@ class AdminPanel:
         x = self.PAD + 8
         return {
             "id":    x,
-            "dict":  x + 200,
-            "err":   x + 295,
-            "grade": x + 385,
-            "date":  x + 475,
+            "dict":  x + 150,
+            "err":   x + 290,
+            "grade": x + 430,
+            "date":  x + 550,
             "btn":   W - 130,
         }
 
@@ -241,15 +241,19 @@ class AdminPanel:
                                self.HDR_H - 4)
         draw_rounded(screen, ACCENT, hdr_rect, r=10)
         labels = [
-            ("Ученик",         cols["id"]),
-            ("Диктантов",      cols["dict"]),
-            ("Ошибок",         cols["err"]),
-            ("Ср. оценка",     cols["grade"]),
-            ("Последний сеанс",cols["date"]),
+            ("Ученик",  cols["id"],    90),
+            ("Диктантов", cols["dict"], 30),
+            ("Ошибок", cols["err"],   30),
+            ("Ср. оценка", cols["grade"], 50),
+            ("Последний сеанс", cols["date"], 150),
         ]
-        for lbl, cx in labels:
+        for lbl, cx, w in labels:
             s = F_BUTTON.render(lbl, True, WHITE)
-            screen.blit(s, (cx, hdr_rect.y + (self.HDR_H - 4 - s.get_height()) // 2))
+            text_rect = s.get_rect(center=(
+                cx + w // 2,
+                hdr_rect.y + (self.HDR_H - 4) // 2
+            ))
+            screen.blit(s, text_rect)
 
         # Строки
         clip = pygame.Rect(0, self.LIST_TOP, W, H - self.LIST_TOP - 10)
