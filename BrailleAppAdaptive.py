@@ -1,8 +1,9 @@
 import pygame
 from pygame.locals import *
 import sys
+import json
 import threading
-import queue
+import multiprocessing
 import os
 from datetime import date as dt_date
 from resources import letters, images, all_words, words_for_dict
@@ -93,37 +94,40 @@ INPUT_MODE_ORDER = ["numpad_normal", "numpad_inverted", "horizontal"]
 # ══════════════════════════════════════════════════════════════════
 #  АСИНХРОННЫЙ СИНТЕЗ РЕЧИ
 # ══════════════════════════════════════════════════════════════════
+def _tts_process(text: str):
+    """
+    Запускается в отдельном процессе — каждый раз чистый COM-контекст.
+    pyttsx3 с sapi5 на Windows не переиспользует движок между вызовами
+    runAndWait() в одном потоке, поэтому нужен свежий процесс.
+    """
+    import pyttsx3
+    engine = pyttsx3.init()
+    engine.setProperty("rate", 150)
+    engine.setProperty("voice", "russian")
+    engine.say(text)
+    engine.runAndWait()
+    engine.stop()
+
+
 class TTSWorker:
     """
-    Один постоянный фоновый поток с очередью.
-    pyttsx3 инициализируется один раз — нет конфликта event loop.
-    Новое сообщение вытесняет предыдущее из очереди (не копятся).
+    Каждый вызов say() запускает отдельный процесс с чистым pyttsx3.
+    Предыдущий процесс принудительно завершается — фразы не копятся.
     """
 
     def __init__(self):
-        self._queue  = queue.Queue()
-        self._thread = threading.Thread(target=self._run, daemon=True)
-        self._thread.start()
-
-    def _run(self):
-        engine = pyttsx3.init()
-        engine.setProperty("rate", 150)
-        engine.setProperty("voice", "russian")
-        while True:
-            text = self._queue.get()   # ждём следующее сообщение
-            if text is None:
-                break
-            engine.say(text)
-            engine.runAndWait()
+        self._proc: multiprocessing.Process | None = None
 
     def say(self, text: str):
-        # Очищаем очередь — старые фразы уже не актуальны
-        while not self._queue.empty():
-            try:
-                self._queue.get_nowait()
-            except queue.Empty:
-                break
-        self._queue.put(text)
+        # Убиваем предыдущий процесс если ещё говорит
+        if self._proc and self._proc.is_alive():
+            self._proc.terminate()
+            self._proc.join(timeout=0.5)
+
+        self._proc = multiprocessing.Process(
+            target=_tts_process, args=(text,), daemon=True
+        )
+        self._proc.start()
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -617,7 +621,11 @@ class BrailleApp:
 
 
 # ══════════════════════════════════════════════════════════════════
+# Обязательно для multiprocessing на Windows — без этого при запуске
+# дочерние процессы TTS будут рекурсивно создавать новые окна.
 if __name__ == "__main__":
+    multiprocessing.freeze_support()
+
     parser = argparse.ArgumentParser()
     parser.add_argument("--mode", choices=["free", "dictation"], default="free")
     args = parser.parse_args()
