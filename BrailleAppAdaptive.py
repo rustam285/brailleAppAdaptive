@@ -1,8 +1,8 @@
 import pygame
 from pygame.locals import *
 import sys
-import json
 import threading
+import queue
 import os
 from datetime import date as dt_date
 from resources import letters, images, all_words, words_for_dict
@@ -95,25 +95,35 @@ INPUT_MODE_ORDER = ["numpad_normal", "numpad_inverted", "horizontal"]
 # ══════════════════════════════════════════════════════════════════
 class TTSWorker:
     """
-    Произносит текст в фоновом потоке — UI не зависает.
-
-    Важно: на Windows pyttsx3 нельзя переиспользовать один движок
-    из разных потоков — движок создаётся заново при каждом вызове.
-    Это и было причиной молчания при переключении раскладки.
+    Один постоянный фоновый поток с очередью.
+    pyttsx3 инициализируется один раз — нет конфликта event loop.
+    Новое сообщение вытесняет предыдущее из очереди (не копятся).
     """
 
+    def __init__(self):
+        self._queue  = queue.Queue()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def _run(self):
+        engine = pyttsx3.init()
+        engine.setProperty("rate", 150)
+        engine.setProperty("voice", "russian")
+        while True:
+            text = self._queue.get()   # ждём следующее сообщение
+            if text is None:
+                break
+            engine.say(text)
+            engine.runAndWait()
+
     def say(self, text: str):
-        def _run():
+        # Очищаем очередь — старые фразы уже не актуальны
+        while not self._queue.empty():
             try:
-                engine = pyttsx3.init()
-                engine.setProperty("rate", 150)
-                engine.setProperty("voice", "russian")
-                engine.say(text)
-                engine.runAndWait()
-                engine.stop()
-            except Exception as e:
-                print(f"[TTS] Ошибка: {e}")
-        threading.Thread(target=_run, daemon=True).start()
+                self._queue.get_nowait()
+            except queue.Empty:
+                break
+        self._queue.put(text)
 
 
 # ══════════════════════════════════════════════════════════════════
