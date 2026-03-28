@@ -435,7 +435,7 @@ class AdminPanel:
 
         # Заголовок колонки
         draw_text(self.screen, "УЧЕНИКИ", F_BADGE, C["text_dim"],
-                  PADDING, HEADER_H + 10)
+                  PADDING, HEADER_H - 10)
         pygame.draw.line(self.screen, C["separator"],
                          (0, LIST_TOP - 2), (LEFT_W, LIST_TOP - 2), 1)
 
